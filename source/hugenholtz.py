@@ -1,0 +1,612 @@
+from __future__ import division
+import numpy as np
+from math import ceil
+from datetime import datetime
+        
+class link(object):
+    '''
+    inner class describing a connection between two nodes in detail
+    '''
+    def __init__(self, nodes, up, in_, tag):
+
+        self.nodes, self.up, self.in_, self.tag = nodes, up, in_, tag
+
+class HUGENHOLTZ(object):
+
+    '''
+    Class to generate the nodes and connections in a Hugenholtz diagram of arbitary order
+    '''
+
+    '''
+    nodes are ordered from 0 at bottom of diagram.
+    '''
+            
+    def __init__(self, order):
+
+        #check order being required and extend tag library if necessary
+        MIN_ORDER, MAX_ORDER = 2, 9
+        if order > MAX_ORDER: exit('Max order is ' + str(MAX_ORDER))
+        if order < MIN_ORDER: exit('Min order is ' + str(MIN_ORDER))
+        self.extend_tags = (order > 5)
+
+        self.order = order
+        self.nodal_pairs = self.generate_nodal_pairs()
+
+        initial_connections, initial_pair = [[0] * self.count_nodal_pairs()], 0
+        self.generate_connections(initial_connections, initial_pair)
+
+        self.particles = []
+        self.particle_connections()
+
+        self.diagrams = len(self.particles)
+
+        self.diagram_algebra, self.diagram_structure = [], []
+
+        #from global particle and hole connections generate algebra and connection details
+        for diagram in range(self.diagrams):
+
+            self.circulation = []
+            
+            holes = self.holes()
+            self.generate_circulation(self.particles[diagram][1], holes[diagram][1])
+            self.physical_interpretation(self.circulation)
+
+            #save global diagram data in class
+            self.diagram_algebra.append(self.rules)
+            self.diagram_structure.append(self.circulation)
+
+    def count_nodal_pairs(self):
+        '''
+        count of rhe number of possible pairs of nodes
+        '''
+
+        return int(self.order * (self.order - 1) * 0.5)
+
+    def count_nodal_lines(self):
+        '''
+        count of the total number of connecting lines in a diagram
+        '''
+
+        return self.order * 2
+
+    def generate_nodal_pairs(self):
+        '''
+        generate a list of all possible nodal pairs
+        '''
+        
+        return [[p, q] for p in range(self.order) for q in range(p+1, self.order)]
+
+    def validate_connections(self, connections):
+        '''
+        check the connection scheme for consistentcy
+        '''
+
+        verified_connection= []
+
+        #check each line in diagram
+        for connection in connections:
+
+            if sum(connection) == self.count_nodal_lines(): 
+            
+                #check line count for diagram
+                nodes = [0] * self.order
+              
+                #accummulate lines to each node
+                for i, pair in enumerate(self.nodal_pairs):
+                    nodes[pair[0]] += connection[i]
+                    nodes[pair[1]] += connection[i]
+              
+                #check correct number of lines at node, should be four
+                if nodes == [4] * self.order:
+              
+                    #number of lines at nodes has been verified - check if all connected
+                    has_check = [False] * self.count_nodal_pairs()
+                    current_route, current_node, has_check[0] = [0,1], 1, True
+              
+                    while True:
+                        #loop over nodal pairs
+                        for i, pair in enumerate(self.nodal_pairs):
+                  
+                            #check if pair not previously done, and if has current node move on the other node in pair
+                            if not has_check[i]:
+                                try:
+                                    idx = pair.index(current_node)
+                                    current_node = pair[1-idx]
+                                    current_route.append(current_node)
+                                except:
+                                    pass
+                                has_check[i] = True
+                                      
+                        #all nodes tested leave while loop
+                        if all(t == True for t in has_check): break
+                    
+                    #have we got all nodes, make unique and sort
+                    current_route = list(set(current_route))
+                    current_route.sort()
+
+                    if all( [i == current_route[i] for i in range(self.order)]): verified_connection.append(connection)
+
+        return verified_connection
+
+
+    def generate_connections(self, connections, current_node_pair):
+        '''
+        generate a list of connections for diagram. Each list item will be a list
+        number of nodes in length, each element representing the number of lines
+        between a pair of nodes in order as generated by 'generate_nodal_pairs'
+        '''
+
+        #recursive return if finished all pairs - validate connections
+        if current_node_pair == self.count_nodal_pairs():
+            self.connections = self.validate_connections(connections)
+            return
+        
+        #define maximum number of connections
+        limit = 3 if self.order != 2 else 4
+    
+        #make copy of connections as we are modifying it and don't want to process appended elements
+        clone = connections.copy()
+
+        #loop over all elements in original connection list
+        for connection in connections:    
+    
+            #loop over all possible connection  counts
+            for i in range(1, limit+1):
+
+                #make copy of current connection
+                current_connection = connection.copy()
+                current_connection[current_node_pair] = i
+
+                #if sum of elements is less than or equal to allowed lines in diagram save
+                if sum(current_connection) <= self.count_nodal_lines():
+                    clone.append(current_connection)
+                
+        #don't need original list now
+        del connections
+            
+        #process the next node pair
+        current_node_pair += 1
+      
+        #recurse
+        nodal_connections = self.generate_connections(clone, current_node_pair)
+        
+        return nodal_connections
+        
+    def particle_connections(self):
+        '''
+        get all valid combinations of particle (up) arrows
+        '''
+
+        for connection in self.connections:
+
+            current_nodal_pair = -1
+            pair_count = self.count_nodal_pairs()
+
+            arrows = [0] * pair_count
+            self.particle(arrows, current_nodal_pair, connection) 
+
+    def particle(self, particles, current_nodal_pair, connection):
+        '''
+        generate all particle combinations for connections
+        '''
+        
+        #up arrow combinations for diagram
+        if current_nodal_pair == self.count_nodal_pairs() - 1:
+            
+            if self.validate_particle(particles, connection):
+                self.particles.append([connection, particles.copy()])
+            return 
+
+        current_nodal_pair += 1
+
+        #get limits of up connections
+        lo = max(connection[current_nodal_pair] - 2, 0)
+        hi = min(connection[current_nodal_pair]    , 2)
+
+        #generate combination within range
+        for i in range(lo, hi+1):
+
+            particles[current_nodal_pair] = i
+            self.particle(particles, current_nodal_pair, connection)
+
+        current_nodal_pair -= 1
+
+        return
+
+    def validate_particle(self, particles, connection):
+        '''
+        check particle combinations compatible with original diagram
+        '''
+        
+        nodes = np.zeros(self.order)
+
+        #loop over all pairs of nodes
+        for n, pair in enumerate(self.nodal_pairs):
+            nodes[max(pair)] += particles[n]
+            nodes[min(pair)] += connection[n] - particles[n]
+
+        return all( [nodes[i] == 2 for i in range(self.order)])
+
+    def holes(self):
+        '''
+        compute the hole arrows from a particle arrow specification
+        '''
+        
+        holes = []
+        
+        for fermi in self.particles:
+            holes.append([fermi[0], [fermi[0][i] - fermi[1][i] for i in range(self.count_nodal_pairs())]])
+
+        return holes
+
+    def generate_circulation(self, current_particle, current_hole):
+        '''
+        create a consistent flow of particle and hole arrows around the diagram
+        circulation is a list of links.
+        '''
+                      
+        #special case - order 2
+        if self.order == 2:
+            self.circulation += [link([0,1], False, True, 'i'), link([0,1], False, True, 'j'), link([0,1], True, False, 'a'), link([0,1], True, False, 'b'),
+                                 link([0,1], False, False,'i'), link([0,1], False, False,'j'), link([0,1], True, True,  'a'), link([0,1], True, True,  'b')]
+            return
+        
+        circulation, tag = [], 1
+
+        def nodal_circulation(count, up_down, in_out):
+            #create link class objects for lines
+            
+            nonlocal tag
+            circulation.append(link([i, j], up_down, in_out, tag))
+            tag += 1
+
+            #two connections in same direction between same nodes
+            if count == 2:
+                circulation.append(link([i, j], up_down, in_out, tag))
+                tag += 1
+
+        def merge_tags():
+            #merge tags on up and down lines between same nodes in same direction
+
+            processed, connection = [], 0
+            while connection != (2 * self.count_nodal_lines()) :
+
+                #current connection
+                link = circulation[connection]
+
+                #see if match in other direction
+                for f in range(connection+1, len(circulation)):
+                    if (([circulation[f].nodes[0], circulation[f].nodes[1], circulation[f].up] == [link.nodes[0], link.nodes[1], link.up])
+                    and (circulation[f].in_ != link.in_)):
+        
+                        #if not already changed re-label and mark as changed
+                        if not f in processed:
+                            circulation[f].tag = link.tag
+                            processed += [f]
+                            break
+
+                connection += 1
+
+        def label_circulation():
+            #exchange integer tags for a particle or hole label
+
+            p_tag, h_tag = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'], ['i', 'j', 'k', 'l', 'm', 'n', 'o', 'p']
+
+            if self.extend_tags:
+                p_tag += [i.upper() for i in p_tag]
+                h_tag += [i.upper() for i in h_tag]
+
+            #for each integer line tag replace with label tag
+            for i in circulation:
+
+                tag = i.tag
+                if str(tag).isdigit():
+
+                    id = p_tag[0] if i.up else h_tag[0]
+
+                    for j in circulation[:]:
+                        if j.tag == tag: j.tag = id
+
+                    if i.up: del p_tag[0]
+                    else:    del h_tag[0]
+                    
+            
+        #for each node - get all in/out/up/down lines
+        for node in range(self.order):
+            for current_pair, pair in enumerate(self.nodal_pairs):
+
+                i, j = pair
+                if (node == i) and (current_particle[current_pair] != 0): nodal_circulation(current_particle[current_pair], True, False)
+                if (node == i) and (current_hole[current_pair] != 0):     nodal_circulation(current_hole[current_pair], False, True)
+                if (node == j) and (current_particle[current_pair] != 0): nodal_circulation(current_particle[current_pair], True, True)
+                if (node == j) and (current_hole[current_pair] != 0):     nodal_circulation(current_hole[current_pair], False, False)
+        
+        #ensure each line has a unique tag
+        merge_tags()
+
+        #exchange integer tags for labels
+        label_circulation()
+
+        self.circulation += circulation
+
+    def physical_interpretation(self, diagram):
+        '''
+        evaluate the rules for determining algebraic expression corresponding to diagram
+        '''
+
+        rules = {}
+        #Rule 1 - numerator < || > evaluation
+        double_bar = ''
+        for order in range(self.order):
+
+            node_link = diagram[4 * order: 4 * order + 4]
+            node_link.sort(reverse=False, key = lambda x: x.in_)
+            double_bar += node_link[0].tag + node_link[1].tag + node_link[2].tag + node_link[3].tag + ','
+        
+        rules['double bar'] = double_bar[:-1]
+
+        #Rules 2 - denominantor orbital energy differences
+        mid_points = []
+        for mid_point in range(self.order - 1):
+            eps = ''
+            
+            for node_link in diagram:
+
+                #just process 'in' to prevent double-counting
+                if node_link.in_ and (node_link.nodes[0] <= mid_point) and (node_link.nodes[1] > mid_point):
+                    eps += '+' + node_link.tag if not node_link.up else '-' + node_link.tag
+
+            mid_points.append(eps[1:])
+
+        rules['orbital energies'] = mid_points
+
+        #Rules 3 & 4 - down lines (h) and closed loops (l)
+        h = sum([1 for node_link in diagram if not node_link.up])
+
+        #get the entire tag string
+        tags = rules['double bar'].replace(',', '')
+        cycles, cycle_tags, current_position = [], [], 0
+
+        #start new cycle with next tag
+        while True:
+
+            #initiate cycle with starting tag (and so target for cycle end)
+            seed_tag = tags[current_position]
+            cycle_tags.append(seed_tag)
+            cycle = seed_tag + '->'
+
+            #start cyclical search along tag string every other tag
+            while True:
+
+                current_position += 2
+                current_tag = tags[current_position]
+                cycle_tags.append(current_tag)
+                cycle += current_tag + '->'
+
+                #are we back to seed tag
+                if seed_tag == current_tag: break
+
+                #if current tag is in remaining string move to it, otherwise start search from beginning
+                if not current_tag in tags[(current_position + 1):]: current_position = 0
+                current_position = tags.index(current_tag, current_position + 1)
+                    
+            #finished cyclical search
+            cycles.append(cycle[:-2])
+
+            #check all labels been considered
+            processed = True
+            for i, tag in enumerate(tags):
+                if tag not in cycle_tags:
+                    processed = False
+                    break
+            if processed: break
+
+            #resume at next unprocessed tag
+            current_position = i
+
+        rules['sign']   = [h//2, len(cycles)]
+        rules['cycles'] = cycles
+
+        #Rules 5 - equivalent lines
+        equivalent = [node_link for node_link in diagram if node_link.in_]
+
+        count = 0
+        for i, node_link in enumerate(equivalent[:-1]):
+            if [equivalent[i].nodes, equivalent[i].up] == [equivalent[i+1].nodes, equivalent[i+1].up]:
+                count += 1
+
+        rules['power of 2'] = -count
+
+        #make class property from rules
+        self.rules = rules
+
+    def ordinal(self, diagram_definition):
+        '''
+        give the sequential number of a diagram in the circulation/particle/hole lists
+        '''
+
+        if type(diagram_definition) == tuple:
+            if type(diagram_definition[0]) == list:
+                particle_match = [i for i, x in enumerate(self.particles) if x[1] == diagram_definition[0]]
+            if type(diagram_definition[1]) == list:
+                hole_match = [i for i, x in enumerate(self.holes()) if x[1] == diagram_definition[1]]
+
+            diagram_no = [i for i in particle_match and hole_match if i in particle_match and hole_match]
+            assert len(diagram_no) == 1
+
+            return diagram_no[0]
+        
+    def debug(self, diagram_no):
+        '''
+        print class properties
+        '''
+
+        if (diagram_no > self.diagrams) or (diagram_no <= 0):
+            print('maximum diagram is ', self.diagrams, ' labelling from 1')
+            return
+        
+        print('\n*********************************\n* Debug Summary For Diagram ', str(diagram_no), ' *')
+        print('*********************************\n')
+        print('order of diagrams                    {:2}'.format(self.order))
+        print('number of diagrams in order          {:2}'.format(self.diagrams))
+        print('number of connections                {:2}'.format(self.count_nodal_lines()))
+
+        particles = self.particles[diagram_no][1]
+        holes = self.holes()[diagram_no][1]
+
+        type = [particles[i] + holes[i] for i in range(self.count_nodal_pairs())]
+        print('node combination type                '.format(), type) 
+
+        print('\n***** particles between nodes *****\n node from  to     particles\n------------------------------')
+        for i, pair in enumerate(self.nodal_pairs):
+              print('       {:2}   {:2}         {:2}'.format(pair[0], pair[1], particles[i]))
+        print('number of up (particle) lines is ', str(sum(particles)))
+
+        print('\n***** particles between nodes *****\n node from  to        holes\n------------------------------')
+        for i, pair in enumerate(self.nodal_pairs):
+              print('       {:2}   {:2}         {:2}'.format(pair[0], pair[1], holes[i]))
+        print('number of down (hole) lines is ', str(sum(holes)))
+
+        circulation = self.diagram_structure[diagram_no]
+        print('\n***** directed connections between nodes *****\n   nodes       direction        id\n-------------------------------------')
+        done = []
+        for i, node_link in enumerate(circulation):
+            f, t = node_link.nodes
+            if node_link.tag in done: continue
+            print(' {:2} ->{:2}     {:8}  {:8} {:2}'.format(f, t, {1:'up', 0:'down'}[node_link.up],
+                                                                       {1:'in', 0:'out'}[node_link.in_], node_link.tag))
+            done.append(node_link.tag)
+
+        rules = self.diagram_algebra[diagram_no]
+        print('\n***** numerator string for algebraic expression *****')
+        s = rules['double bar'].split(',')
+        s = '<' + '> <'.join([i[:2] + '||' + i[2:] for i in s]) + '>'
+        print('    ', rules['double bar'], '   ', s)
+
+        print('\n***** orbital difference denominator *****')
+        s = '(' + ') ('.join(rules['orbital energies']) + ')'
+        print('    ', rules['orbital energies'], '   ', s)
+
+        print('\n***** down line count and closed loop count *****')
+        print('     down lines = ', rules['sign'][0])
+        print('     closed cycles found are ',len(rules['cycles']))
+        for i, cycle in enumerate(rules['cycles']):
+            print('     cycle ', i, ' is ', cycle)
+
+        sgn = '+' if ((sum(rules['sign']) % 2) == 0) else '-'
+        print('\n     overall sign is    ', sgn)
+
+        print('\n***** equivalent lines count *****\n     equivalent lines are ', -rules['power of 2'])
+        print('     resulting factor is ', 2**(rules['power of 2']))
+
+    def generate_file(self, file_type, file=None):
+        '''
+        generate either a Latex file of the diagram algebraic expressions or a file of a Python code subroutine
+        to evaluate the Moller-Plesset energy correction at the specified order of theory
+        '''
+
+        self.tex_(file) if file_type == 'latex' else self.py_(file)
+
+    def tex_(self, file=None):
+        '''
+        create a latex file of the diagrams. This can be converted to pdf file using an on-line editor
+        eg [https://www.tutorialspoint.com/online_latex_editor.php]
+        '''
+
+        if file is None: file = 'mp' + str(self.order) + '.tex' 
+        f = open(file, 'w')
+
+        size = [12, 'normalsize'] if self.order < 5 else [10, 'scriptsize']        
+        f.write('\\pdfminorversion=4\n\\documentclass[' + str(size[0]) + 'pt,oneside,a4paper,fleqn]{article}\n')
+        f.write('\\usepackage{amsmath}\n\\usepackage[top=1cm, bottom=1cm, left=1cm, right=0.5cm]{geometry}\n\n')
+
+        f.write('\\begin{document}\n\\title{Equations for Moller-Plesset Theory of Order ' + str(self.order) + '}\n')
+        f.write('\\author{PW Borthwick}\n\\date{' + datetime.now().strftime('%B %Y') + '}\n\\maketitle\n')
+
+        f.write('\n\\section{Diagram Details}\n\\begin{itemize}')
+        f.write('\n\\item number of nodes (order) is ' + str(self.order))
+        f.write('\n\\item number of diagrams in order is ' + str(self.diagrams))
+        f.write('\n\\item number of node pairs per diagram is ' + str(self.count_nodal_pairs()))
+        f.write('\n\\item number of connections (lines) per diagram is ' + str(self.count_nodal_lines()))
+        f.write('\n\\end{itemize}\n\n\\section{Equations}\n\\' + size[1] + '\n\n')
+
+        holes = self.holes()
+        for n, diagram in enumerate(self.diagram_algebra):
+            p, h, t = [str(i) for i in self.particles[n][1]], [str(i) for i in holes[n][1]], [str(self.particles[n][1][i] + holes[n][1][i]) for i in range(self.count_nodal_pairs())]
+            
+            f.write('\[ \\boldsymbol{ \\begin{pmatrix} ' + ' & '.join(t) + ' \\end{pmatrix} \\rightarrow ')
+            f.write('\\begin{pmatrix} ' + ' & '.join(p) + ' \\end{pmatrix} \\uparrow~~~~~')
+            f.write('\\begin{pmatrix} ' + ' & '.join(h) + ' \\end{pmatrix} \\downarrow } \]\n')
+
+            f.write('$$(-1)^{' + str(diagram['sign'][0]) + '+' + str(diagram['sign'][1]) + '}~~(2)^{' + str(diagram['power of 2']) + '}~~')
+            s = diagram['double bar'].split(',')
+            numerator   = '~'.join(['\\langle ' + x[:2] + ' \\Vert ' + x[2:] + ' \\rangle ' for x in diagram['double bar'].split(',')])
+            denominator = '('
+            for eps in diagram['orbital energies']:
+                for chr in eps:
+                    if chr not in ['+', '-']:
+                        denominator += '\\epsilon_' + chr + ' '
+                    else:
+                        denominator += chr
+                denominator += ') ('  
+            
+            f.write('\\frac{' + numerator+ '}{' + denominator[:-1] + '}$$\n\n')
+
+        f.write('\\end{document}')
+            
+        f.close()
+        
+    def py_(self, file):
+        '''
+        create a text file of a python subroutine to compute the Moller-Plesset correction at the specified order
+        subroutine takes as arguments - spin-molecular orbital energies and 2-electron repulsion integrals and the
+        number of occupied spin orbitals
+        '''
+
+        if file is None: file = 'mp' + str(self.order) + '.py' 
+        f = open(file, 'w')
+
+        #get the degrees of the orbital differences required
+        orbital_delta_types = list(set([ceil(len(i)*0.5) for x in self.diagram_algebra for i in x['orbital energies']]))
+        orbital_delta_types.sort()
+        
+        #generate orbital deltas
+        deltas = []
+        for delta_degree in orbital_delta_types:
+            slices = 'n' * delta_degree
+            orbital_delta = [slices[:i] + ['o','v'][i >= delta_degree//2] + slices[i+1:] for i in range(delta_degree)]
+            orbital_delta = ['eps[' + ','.join(x for x, y in zip(i[::1], i[::1])) + ']' for i in orbital_delta]
+            orbital_delta = ''.join([x + '+' if 'o' in orbital_delta[min(i+1, delta_degree-1)] else x + '-' for i, x in enumerate(orbital_delta)])[:-1]
+            deltas.append('reciprocal(' + orbital_delta + ')')
+
+        code  = 'def damp(eps, g, nocc):\n    #moller-plesset ' + str(self.order) + '\n\n'
+        code += '    from numpy import newaxis, reciprocal, einsum\n\n'
+        code += '    #orbital slices\n    o, v, n = slice(None, nocc), slice(nocc, None), newaxis\n'
+        code += '    #orbital energy differences\n    deltas = {}\n'
+        for i, x in enumerate(deltas):
+            code += '    deltas[\'' + str(orbital_delta_types[i]) + '\'] = ' + x + '\n\n'
+
+        code += '    #loop over diagrams\n    mp = 0.0\n'
+        for diagram in self.diagram_algebra:
+            sgn = '' if (sum(diagram['sign']) % 2) == 0 else '-'
+            pwr = '' if diagram['power of 2'] == 0 else 'pow(2,' + str(diagram['power of 2']) + ')*'
+            dlt = ','.join([x.replace('+','').replace('-','') for x in diagram['orbital energies']])
+
+            code += '    mp += (' + sgn + pwr + 'einsum(\'' + diagram['double bar'] + ',' + dlt + '->\',\n'
+
+            slices = diagram['double bar'].split(',')
+            operators = '               g['
+            for x in slices:
+                for i in x:
+                    slc = 'v,' if i.lower() < 'h' else 'o,'
+                    operators += slc
+                operators = operators[:-1] + '], g['
+            code += operators[:-2] 
+
+            pwr = [ceil(len(x)*0.5) for x in diagram['orbital energies']]
+            pwr = ', '.join(['deltas[\'' + str(i) + '\']' for i in pwr])
+            code += pwr + ',\n               optimize=True))\n'
+
+        code += '    return mp'
+        f.write(code)
+        

@@ -1,0 +1,32 @@
+\pdfminorversion=4
+\documentclass[12pt,oneside,a4paper,fleqn]{article}
+\usepackage{amsmath}
+\usepackage[top=1cm, bottom=1cm, left=1cm, right=0.5cm]{geometry}
+
+\begin{document}
+\title{Equations for Moller-Plesset Theory of Order 3}
+\author{PW Borthwick}
+\date{January 2023}
+\maketitle
+
+\section{Diagram Details}
+\begin{itemize}
+\item number of nodes (order) is 3
+\item number of diagrams in order is 3
+\item number of node pairs per diagram is 3
+\item number of connections (lines) per diagram is 6
+\end{itemize}
+
+\section{Equations}
+\normalsize
+
+\[ \boldsymbol{ \begin{pmatrix} 2 & 2 & 2 \end{pmatrix} \rightarrow \begin{pmatrix} 0 & 2 & 0 \end{pmatrix} \uparrow~~~~~\begin{pmatrix} 2 & 0 & 2 \end{pmatrix} \downarrow } \]
+$$(-1)^{4+2}~~(2)^{-3}~~\frac{\langle ab \Vert ij \rangle ~\langle ij \Vert kl \rangle ~\langle kl \Vert ab \rangle }{(\epsilon_i +\epsilon_j -\epsilon_a -\epsilon_b ) (\epsilon_k +\epsilon_l -\epsilon_a -\epsilon_b ) }$$
+
+\[ \boldsymbol{ \begin{pmatrix} 2 & 2 & 2 \end{pmatrix} \rightarrow \begin{pmatrix} 1 & 1 & 1 \end{pmatrix} \uparrow~~~~~\begin{pmatrix} 1 & 1 & 1 \end{pmatrix} \downarrow } \]
+$$(-1)^{3+3}~~(2)^{0}~~\frac{\langle ab \Vert ij \rangle ~\langle ic \Vert ak \rangle ~\langle jk \Vert bc \rangle }{(\epsilon_i +\epsilon_j -\epsilon_a -\epsilon_b ) (\epsilon_j +\epsilon_k -\epsilon_b -\epsilon_c ) }$$
+
+\[ \boldsymbol{ \begin{pmatrix} 2 & 2 & 2 \end{pmatrix} \rightarrow \begin{pmatrix} 2 & 0 & 2 \end{pmatrix} \uparrow~~~~~\begin{pmatrix} 0 & 2 & 0 \end{pmatrix} \downarrow } \]
+$$(-1)^{2+2}~~(2)^{-3}~~\frac{\langle ab \Vert ij \rangle ~\langle cd \Vert ab \rangle ~\langle ij \Vert cd \rangle }{(\epsilon_i +\epsilon_j -\epsilon_a -\epsilon_b ) (\epsilon_i +\epsilon_j -\epsilon_c -\epsilon_d ) }$$
+
+\end{document}
